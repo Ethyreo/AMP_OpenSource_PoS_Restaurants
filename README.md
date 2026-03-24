@@ -1,42 +1,101 @@
-﻿# Restaurant POS Android
+# 🍽️ AMP Restaurant POS
 
-Local-first restaurant PoS app for Android-targeted devices. The product core is a self-contained web app with IndexedDB persistence, browser-side billing, and print-ready receipts. A matching Android Studio shell is included so the same app can run as an installable local Android app with no backend.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Platform: Android](https://img.shields.io/badge/Platform-Android-3DDC84.svg?logo=android&logoColor=white)](https://www.android.com/)
+[![Tech: PWA](https://img.shields.io/badge/Tech-PWA-blue.svg)](https://web.dev/progressive-web-apps/)
 
-## What Is Implemented
+**AMP Restaurant POS** is a high-performance, local-first Point of Sale system designed specifically for Android tablets and handhelds. Built with a "never-down" architecture, it ensures your restaurant continues to operate smoothly even without an internet connection.
 
-- Cred-style visual shell with sober pastel tokens, soft depth, and spacious table cards
-- Floor view with urgency-aware table states and filters
-- Long-press table move flow for active orders
-- Searchable seeded menu with veg and non-veg accents
-- Slide-out order drawer with live billing summary
-- Local billing engine with editable GST and service charge settings
-- IndexedDB persistence for table drafts, settings, and bill history
-- Local backup export and restore hooks for workstation state
-- End-of-day summary with revenue, top items, and payment splits
-- Receipt print area for browser printing and native Android print bridge support
-- Android Studio shell in `android-shell/` using WebView asset loading from bundled local files
+---
 
-## Web App Usage
+## ✨ Key Features
 
-- You can open `index.html` directly for a simple local run.
-- IndexedDB works best in a normal browser context.
-- Service worker support only applies when served over HTTP.
+### 🏢 Floor Management
+*   **Dynamic Floor View**: Toggle between detailed table cards and a high-density compact grid.
+*   **Real-time Table States**: Color-coded status for Empty, Active, and Closing tables.
+*   **Seat Management**: Detailed tracking of guests and orders per table.
 
-Optional local static serving:
+### 💳 Modern Billing & Orders
+*   **Split Payments**: Native support for splitting bills by amount or items.
+*   **GST Integration**: Toggle GST on/off with custom tax ID support on receipts.
+*   **Menu Studio**: In-app dish management with category sorting and dynamic pricing.
+*   **In-Table Workflow**: Fast-switching between "Menu" and "Current Bill" tabs for rapid order entry.
 
-1. Open a terminal in this folder.
-2. Run `npm run serve`.
-3. Open `http://localhost:4173`.
+### 📊 Professional Analytics
+*   **Financial Insights**: Daily totals, payment breakdowns, and bill history.
+*   **Trend Analysis**: Compare performance day-over-day or month-over-month.
+*   **Dish Performance**: Identify your best-selling items and revenue drivers.
 
-## Android Studio Usage
+### 🛡️ Reliability & Backup
+*   **Offline-First**: All data, logic, and assets are stored locally on-device.
+*   **Recovery Journaling**: Frequent state snapshots to prevent data loss on crashes.
+*   **24-Hour Native Backups**: Automatic JSON exports to `Downloads/KenPoS` that survive app uninstalls.
+*   **Native Printing**: Direct support for Bluetooth thermal printers and Android Print Service.
 
-1. Open `android-shell/` in Android Studio.
-2. Sync the Gradle project.
-3. Run the app on an emulator or device.
-4. If web assets change, run `powershell -ExecutionPolicy Bypass -File .\sync-web-assets.ps1` from the project root before rebuilding the Android shell.
+---
 
-## Notes
+## 🛠️ Technology Stack
 
-- No server-side app or backend is required for the current implementation.
-- The Android shell loads the app from bundled assets, not a remote URL.
-- The Android shell currently focuses on local asset loading, IndexedDB-capable WebView runtime, file chooser support, and native printing bridge.
+*   **Logic & UI**: Pure Vanilla JavaScript, HTML5, and CSS3 (Zero external dependencies for maximum speed).
+*   **Storage**: Browser `IndexedDB` for high-speed local data persistence.
+*   **Wrapper**: Android Studio WebView Shell with `WebViewAssetLoader` for local asset serving.
+*   **Bridges**: Custom Java-to-JavaScript bridges for low-level hardware access (Bluetooth, File System).
+
+---
+
+## 📂 Project Structure
+
+```text
+├── android-shell/     # Android Studio project source (Java/Gradle)
+├── app/               # Web application logic, styles, and scripts
+├── docs/              # Product specifications and developer notes
+├── index.html         # Main entry point for the PWA
+├── manifest.webmanifest # PWA configuration
+└── sync-web-assets.ps1 # Build utility to sync web assets to Android
+```
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+*   [Android Studio Koala+](https://developer.android.com/studio)
+*   An Android device or emulator (API 26+)
+
+### Installation
+1.  **Clone the Repository**:
+    ```bash
+    git clone https://github.com/Ethyreo/AMP_OpenSource_PoS_Restaurants.git
+    cd AMP_OpenSource_PoS_Restaurants
+    ```
+2.  **Sync Web Assets**:
+    Run the PowerShell script to bundle the latest web files into the Android project:
+    ```powershell
+    .\sync-web-assets.ps1
+    ```
+3.  **Build & Run**:
+    Open the `android-shell/` folder in Android Studio and hit **Run**.
+
+---
+
+## 🏗️ Architecture Overview
+
+The system operates as a **Hybrid PWA**. The core application logic lives in the `app/` directory and is served locally by the Android shell. This hybrid approach combines the rapid development of web technologies with the hardware stability of native Android.
+
+For detailed notes on data schema and print implementation, see [docs/architecture/README.md](docs/architecture/README.md).
+
+---
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) to get started.
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+**Built by Gurman Singh**
