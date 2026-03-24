@@ -50,6 +50,7 @@ const refs = {
   shiftSnapshot: document.getElementById('shiftSnapshot'),
   tableGrid: document.getElementById('tableGrid'),
   menuList: document.getElementById('menuList'),
+  toggleMenuCardModeButton: document.getElementById('toggleMenuCardModeButton'),
   categoryChips: document.getElementById('categoryChips'),
   floorFilters: document.getElementById('floorFilters'),
   floorSnapshot: document.getElementById('floorSnapshot'),
@@ -537,6 +538,11 @@ function bindAnalyticsFilters() {
 
 
 function bindMenuActions() {
+  refs.toggleMenuCardModeButton?.addEventListener('click', safely(async () => {
+    const nextMode = getState().settings.menuCardMode === 'compact' ? 'detail' : 'compact';
+    await saveSettings({ menuCardMode: nextMode });
+  }, 'Unable to switch the menu item view.'));
+
   refs.menuList.addEventListener('click', safely(async (event) => {
     const button = event.target.closest('[data-add-item]');
     if (!button) return;
@@ -826,6 +832,7 @@ initializeStore().then(() => {
 });
 
 registerServiceWorker();
+
 
 
 

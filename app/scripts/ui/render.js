@@ -311,27 +311,45 @@ function renderTables(state, refs) {
 
 function renderMenu(state, refs) {
   const categories = ['All', ...new Set(state.menu.map((item) => item.category))];
+  const compactMode = state.settings.menuCardMode === 'compact';
+  refs.toggleMenuCardModeButton.textContent = compactMode ? 'Detailed Menu' : 'Compact Menu';
   refs.categoryChips.innerHTML = categories.map((category) => `
     <button class="category-chip ${category === state.category ? 'is-active' : ''}" data-category="${escapeHtml(category)}">${escapeHtml(category)}</button>
   `).join('');
 
   const filtered = getFilteredMenu(state.menu, state.search, state.category);
-  refs.menuList.innerHTML = filtered.length ? filtered.map((item) => `
-    <article class="menu-card">
-      <div class="menu-card-head">
-        <div>
-          <small>${escapeHtml(item.code)} · ${escapeHtml(item.category)}</small>
-          <h4>${escapeHtml(item.name)}</h4>
+  refs.menuList.classList.toggle('menu-list-compact', compactMode);
+  refs.menuList.innerHTML = filtered.length ? filtered.map((item) => {
+    if (compactMode) {
+      return `
+        <article class="menu-card menu-card-compact">
+          <div class="compact-menu-name">${escapeHtml(item.name)}</div>
+          <div class="compact-menu-price">${formatCurrency(item.price)}</div>
+          <div class="compact-menu-meta">
+            <span class="badge ${item.type}">${item.type === 'veg' ? 'Veg' : 'Non-Veg'}</span>
+          </div>
+          <button class="add-button compact-add-button" data-add-item="${item.id}">Add</button>
+        </article>
+      `;
+    }
+
+    return `
+      <article class="menu-card">
+        <div class="menu-card-head">
+          <div>
+            <small>${escapeHtml(item.code)} · ${escapeHtml(item.category)}</small>
+            <h4>${escapeHtml(item.name)}</h4>
+          </div>
+          <span class="price-tag">${formatCurrency(item.price)}</span>
         </div>
-        <span class="price-tag">${formatCurrency(item.price)}</span>
-      </div>
-      <p class="muted">${escapeHtml(item.note || 'No note added')}</p>
-      <div class="badge-row">
-        <span class="badge ${item.type}"><span class="food-dot ${item.type}"></span>${item.type === 'veg' ? 'Veg' : 'Non-Veg'}</span>
-      </div>
-      <button class="add-button" data-add-item="${item.id}">Add to check</button>
-    </article>
-  `).join('') : '<div class="empty-state"><h4>No menu matches</h4><p class="muted">Try a different code, name, or category.</p></div>';
+        <p class="muted">${escapeHtml(item.note || 'No note added')}</p>
+        <div class="badge-row">
+          <span class="badge ${item.type}"><span class="food-dot ${item.type}"></span>${item.type === 'veg' ? 'Veg' : 'Non-Veg'}</span>
+        </div>
+        <button class="add-button" data-add-item="${item.id}">Add to check</button>
+      </article>
+    `;
+  }).join('') : '<div class="empty-state"><h4>No menu matches</h4><p class="muted">Try a different code, name, or category.</p></div>';
 }
 
 function renderOrder(state, refs) {
@@ -664,6 +682,7 @@ export function renderApp(state, refs) {
   renderSettings(state, refs);
   renderReceipt(state, refs);
 }
+
 
 
 

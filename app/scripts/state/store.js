@@ -130,6 +130,7 @@ function normalizeSettings(nextSettings = {}) {
     preferredPrinterAddress: String(merged.preferredPrinterAddress || current.preferredPrinterAddress || ''),
     preferredPrinterName: String(merged.preferredPrinterName || current.preferredPrinterName || ''),
     floorCardMode: merged.floorCardMode === 'compact' ? 'compact' : 'detail',
+    menuCardMode: merged.menuCardMode === 'compact' ? 'compact' : 'detail',
     restaurantLogoDataUrl: String(merged.restaurantLogoDataUrl || ''),
     setupCompletedAt: String(merged.setupCompletedAt || current.setupCompletedAt || ''),
     tableCount: Object.prototype.hasOwnProperty.call(nextSettings, 'tableCount')
@@ -680,5 +681,6 @@ export async function importSnapshot(snapshot) {
 export function getState() {
   return cloneState();
 }
+
 
 

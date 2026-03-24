@@ -24,6 +24,7 @@ export const DEFAULT_SETTINGS = {
   preferredPrinterAddress: '',
   preferredPrinterName: '',
   floorCardMode: 'detail',
+  menuCardMode: 'detail',
   restaurantLogoDataUrl: '',
   setupCompletedAt: '',
   tableCount: 12,
@@ -99,6 +100,7 @@ function normalizeSettings(settings) {
     preferredPrinterAddress: String(merged.preferredPrinterAddress || ''),
     preferredPrinterName: String(merged.preferredPrinterName || ''),
     floorCardMode: merged.floorCardMode === 'compact' ? 'compact' : 'detail',
+    menuCardMode: merged.menuCardMode === 'compact' ? 'compact' : 'detail',
     restaurantLogoDataUrl: String(merged.restaurantLogoDataUrl || ''),
     setupCompletedAt: String(merged.setupCompletedAt || ''),
     tableCount: Math.max(1, Number(merged.tableCount) || DEFAULT_SETTINGS.tableCount),
@@ -248,5 +250,6 @@ export async function replaceAppSnapshot(snapshot) {
     billHistory,
   };
 }
+
 
 
