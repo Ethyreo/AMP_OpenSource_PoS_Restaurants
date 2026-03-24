@@ -1,0 +1,10 @@
+.gradle-cache/
+.gradle-home/
+android-shell/.gradle/
+android-shell/build/
+android-shell/app/build/
+android-shell/app/src/main/assets/web/
+node_modules/
+*.log
+.DS_Store
+Thumbs.db

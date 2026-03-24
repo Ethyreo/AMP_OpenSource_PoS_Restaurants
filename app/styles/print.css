@@ -1,0 +1,20 @@
+﻿@page {
+  margin: 8mm;
+}
+
+body {
+  background: white !important;
+}
+
+.no-print,
+.app-shell {
+  display: none !important;
+}
+
+.receipt-print-area {
+  display: block !important;
+}
+
+.receipt-sheet {
+  display: block;
+}

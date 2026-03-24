@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f7f8fa" />
+  <title>AMP Restaurant POS</title>
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="stylesheet" href="./app/styles/tokens.css" />
+  <link rel="stylesheet" href="./app/styles/main.css" />
+  <link rel="stylesheet" href="./app/styles/print.css" media="print" />
+</head>
+<body>
+  <section id="launchOverlay" class="launch-overlay">
+    <div class="launch-card premium-panel">
+      <div id="launchLogo" class="launch-logo"></div>
+
+      <div id="launchWelcomePanel" class="launch-stack">
+        <p class="eyebrow">Locally Powered Hospitality</p>
+        <h1 id="launchTitle">Your Restaurant</h1>
+        <p id="launchCopy" class="launch-copy">Built by Gurman Singh for</p>
+        <p class="launch-inline"><span id="launchRestaurantInline">Your Restaurant</span></p>
+        <button id="launchDismissButton" class="button">Start Service</button>
+      </div>
+
+      <div id="launchSetupPanel" class="launch-stack hidden">
+        <div class="launch-header-block">
+          <p class="eyebrow">Restaurant Setup</p>
+          <h1>Make this workstation yours</h1>
+          <p class="launch-copy">Set the restaurant name, optional logo, billing defaults, floor size, and appearance before service begins.</p>
+        </div>
+
+        <form id="setupForm" class="setup-grid">
+          <label>
+            <span>Restaurant Name</span>
+            <input name="restaurantName" type="text" maxlength="48" placeholder="AMP Signature Kitchen" required />
+          </label>
+          <label>
+            <span>Receipt Footer</span>
+            <input name="receiptFooter" type="text" maxlength="80" placeholder="Thanks for dining with us." />
+          </label>
+          <label>
+            <span>Service Charge %</span>
+            <input name="serviceChargeRate" type="number" step="0.01" min="0" max="100" />
+          </label>
+          <label class="toggle-field">
+            <span>Enable GST</span>
+            <input name="gstEnabled" type="checkbox" value="true" />
+          </label>
+          <label>
+            <span>GST %</span>
+            <input name="gstRate" type="number" step="0.01" min="0" max="100" />
+          </label>
+          <label id="setupGstNumberField">
+            <span>GST Number</span>
+            <input name="gstNumber" type="text" maxlength="20" placeholder="27ABCDE1234F1Z5" />
+          </label>
+          <label>
+            <span>Default Discount</span>
+            <input name="defaultDiscount" type="number" step="0.01" min="0" />
+          </label>
+          <label>
+            <span>Number of Tables</span>
+            <input name="tableCount" type="number" min="1" max="80" />
+          </label>
+          <label>
+            <span>Appearance</span>
+            <select name="themeMode">
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
+          </label>
+          <div class="setup-logo-panel premium-subpanel">
+            <div id="setupLogoPreview" class="logo-preview"></div>
+            <div class="tool-actions">
+              <button id="setupUploadLogoButton" class="button button-secondary" type="button">Upload Logo</button>
+              <button id="setupClearLogoButton" class="button button-ghost" type="button">Remove Logo</button>
+            </div>
+            <input id="setupLogoFileInput" type="file" accept="image/*" class="hidden" />
+          </div>
+          <div class="setup-actions">
+            <button type="submit" class="button">Save and Enter</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <div class="app-shell">
+    <aside class="rail no-print">
+      <div class="brand-block">
+        <p class="eyebrow">AMP Restaurant POS</p>
+        <h1 id="brandRestaurantName">AMP Restaurant POS</h1>
+        <p id="brandRestaurantMeta" class="muted">Calm service flow for busy shifts.</p>
+      </div>
+
+      <nav class="rail-nav" aria-label="Primary">
+        <button class="nav-chip is-active" data-view-trigger="floor">Floor</button>
+        <button class="nav-chip" data-view-trigger="summary">Analytics</button>
+        <button class="nav-chip" data-view-trigger="settings">Settings</button>
+      </nav>
+
+      <section class="rail-panel glass-panel">
+        <p class="panel-label">Floor Filters</p>
+        <div id="floorFilters" class="chip-row"></div>
+      </section>
+
+      <section class="rail-panel note-panel premium-subpanel">
+        <p class="panel-label">Service Mode</p>
+        <p class="muted">Every table, menu, and receipt change is journaled locally before IndexedDB flushes, so accidental closes and background kills are less destructive.</p>
+      </section>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar no-print premium-panel">
+        <div>
+          <p class="eyebrow">Offline First</p>
+          <h2 id="viewTitle">Floor Service</h2>
+        </div>
+        <div class="topbar-actions">
+          <label class="search-field">
+            <span>Quick Search</span>
+            <input id="globalSearch" type="search" placeholder="Find item by code or name" autocomplete="off" />
+          </label>
+          <button id="printReceiptButton" class="button button-secondary">Print Bill</button>
+        </div>
+      </header>
+
+      <section id="statusBar" class="status-bar no-print"></section>
+
+      <section id="floorView" class="view-panel is-active" data-view="floor">
+        <section class="floor-hero premium-panel royal-panel">
+          <div class="floor-hero-copy">
+            <p class="eyebrow">Royal Service Desk</p>
+            <h3 id="floorHeroRestaurantName">Your Restaurant</h3>
+            <p id="floorHeroSubtitle" class="muted">Floor management starts here, with every draft and bill stored locally on this device.</p>
+          </div>
+          <div id="shiftSnapshot" class="shift-snapshot floor-hero-metrics"></div>
+        </section>
+
+        <div class="section-header floor-section-header">
+          <div>
+            <p class="eyebrow">Live Tables</p>
+            <h3>Floor Management</h3>
+          </div>
+          <div class="header-actions">
+            <button id="createWalkInButton" class="button button-secondary">Open Walk-In</button>
+            <button id="toggleFloorCardModeButton" class="button button-ghost">Compact Tables</button>
+            <button id="clearMoveModeButton" class="button button-ghost hidden">Cancel Move</button>
+          </div>
+        </div>
+        <div id="floorSnapshot" class="floor-snapshot"></div>
+        <div id="tableGrid" class="table-grid"></div>
+      </section>
+
+      <section id="summaryView" class="view-panel" data-view="summary">
+        <div class="section-header">
+          <div>
+            <p class="eyebrow">History and Trends</p>
+            <h3>Analytics Workspace</h3>
+          </div>
+          <div class="header-actions">
+            <button id="printSummaryButton" class="button button-secondary">Print Current Receipt</button>
+            <button id="resetAnalyticsFiltersButton" class="button button-ghost">Clear Filters</button>
+          </div>
+        </div>
+
+        <section class="analytics-toolbar premium-panel no-print">
+          <label>
+            <span>Past Bills Date</span>
+            <input id="historyDateInput" type="date" />
+          </label>
+          <label>
+            <span>Compare Day A</span>
+            <input id="compareDayAInput" type="date" />
+          </label>
+          <label>
+            <span>Compare Day B</span>
+            <input id="compareDayBInput" type="date" />
+          </label>
+          <label>
+            <span>Month A</span>
+            <input id="compareMonthAInput" type="month" />
+          </label>
+          <label>
+            <span>Month B</span>
+            <input id="compareMonthBInput" type="month" />
+          </label>
+          <label>
+            <span>Dish Lens</span>
+            <select id="dishAnalyticsSelect"></select>
+          </label>
+        </section>
+
+        <div id="summaryCards" class="summary-cards"></div>
+
+        <div class="summary-layout summary-layout-wide analytics-stack">
+          <section class="glass-panel summary-panel premium-subpanel">
+            <div class="panel-header">
+              <h4>Most Sold Items</h4>
+            </div>
+            <div id="topItems" class="summary-list"></div>
+          </section>
+          <section class="glass-panel summary-panel premium-subpanel">
+            <div class="panel-header">
+              <h4>Payment Split</h4>
+            </div>
+            <div id="paymentSplit" class="summary-list"></div>
+          </section>
+          <section class="glass-panel summary-panel premium-subpanel">
+            <div class="panel-header">
+              <h4>Bills for Selected Date</h4>
+            </div>
+            <div id="billHistory" class="summary-list"></div>
+          </section>
+        </div>
+
+        <section id="receiptPreviewPanel" class="glass-panel summary-panel premium-panel receipt-preview-panel hidden">
+          <div class="panel-header split-header">
+            <div>
+              <p class="eyebrow">Selected Bill</p>
+              <h4>Receipt Preview</h4>
+            </div>
+            <div class="header-actions">
+              <button id="printSelectedReceiptButton" class="button button-secondary" type="button">Print Selected</button>
+              <button id="closeReceiptPreviewButton" class="button button-ghost" type="button">Close Preview</button>
+            </div>
+          </div>
+          <div id="receiptPreview" class="receipt-preview"></div>
+        </section>
+
+        <div class="summary-layout analytics-grid analytics-stack">
+          <section class="glass-panel summary-panel premium-subpanel">
+            <div class="panel-header">
+              <h4>Today vs Selected Day</h4>
+            </div>
+            <div id="dayComparison" class="summary-list"></div>
+          </section>
+          <section class="glass-panel summary-panel premium-subpanel">
+            <div class="panel-header">
+              <h4>Month on Month</h4>
+            </div>
+            <div id="monthComparison" class="summary-list"></div>
+          </section>
+          <section class="glass-panel summary-panel premium-subpanel">
+            <div class="panel-header">
+              <h4>Dish Analytics</h4>
+            </div>
+            <div id="dishAnalyticsList" class="summary-list"></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="settingsView" class="view-panel" data-view="settings">
+        <div class="section-header">
+          <div>
+            <p class="eyebrow">Control Room</p>
+            <h3>Settings and Menu</h3>
+          </div>
+        </div>
+
+        <div class="settings-layout">
+          <section class="glass-panel settings-stack premium-panel">
+            <div class="settings-banner premium-subpanel">
+              <div>
+                <p class="eyebrow">Restaurant Setup</p>
+                <h4 id="settingsRestaurantName">Your Restaurant</h4>
+              </div>
+              <span id="settingsSetupState" class="setup-state-pill">Needs setup</span>
+            </div>
+
+            <form id="settingsForm" class="settings-grid">
+              <label>
+                <span>Restaurant Name</span>
+                <input name="restaurantName" type="text" maxlength="48" />
+              </label>
+              <label>
+                <span>Receipt Footer</span>
+                <input name="receiptFooter" type="text" maxlength="80" />
+              </label>
+              <label>
+                <span>Service Charge %</span>
+                <input name="serviceChargeRate" type="number" step="0.01" min="0" max="100" />
+              </label>
+              <label class="toggle-field">
+                <span>Enable GST</span>
+                <input name="gstEnabled" type="checkbox" value="true" />
+              </label>
+              <label>
+                <span>GST %</span>
+                <input name="gstRate" type="number" step="0.01" min="0" max="100" />
+              </label>
+              <label id="settingsGstNumberField">
+                <span>GST Number</span>
+                <input name="gstNumber" type="text" maxlength="20" placeholder="27ABCDE1234F1Z5" />
+              </label>
+              <label>
+                <span>Default Discount</span>
+                <input name="defaultDiscount" type="number" step="0.01" min="0" value="0" />
+              </label>
+              <label>
+                <span>Number of Tables</span>
+                <input name="tableCount" type="number" min="1" max="80" />
+              </label>
+              <label>
+                <span>Panel Finish</span>
+                <select name="glassMode">
+                  <option value="soft">Soft</option>
+                  <option value="clear">Clear</option>
+                </select>
+              </label>
+              <label>
+                <span>Appearance</span>
+                <select name="themeMode">
+                  <option value="light">Light</option>
+                  <option value="dark">Dark</option>
+                </select>
+              </label>
+              <label class="toggle-field">
+                <span>Print Bill On Table Close</span>
+                <input name="autoPrintOnClose" type="checkbox" value="true" />
+              </label>
+              <div class="settings-actions">
+                <button type="submit" class="button">Save Settings</button>
+              </div>
+            </form>
+
+            <section class="glass-panel tools-panel premium-subpanel">
+              <div class="panel-header">
+                <h4>Brand and Backup Toolkit</h4>
+                <p class="muted">Restaurant identity, branded shortcut, and workstation backups remain local and editable anytime.</p>
+              </div>
+              <div class="logo-panel">
+                <div id="logoPreview" class="logo-preview"></div>
+                <div class="tool-actions">
+                  <button id="uploadLogoButton" class="button button-secondary" type="button">Upload Logo</button>
+                  <button id="clearLogoButton" class="button button-ghost" type="button">Remove Logo</button>
+                </div>
+                <input id="logoFileInput" type="file" accept="image/*" class="hidden" />
+              </div>
+              <p id="backupStatusText" class="muted tool-status">Automatic backup stores the latest local database snapshot in Downloads/KenPoS once every 24 hours.</p>
+              <div class="tool-actions two-column-actions">
+                <button id="exportBackupButton" class="button" type="button">Export Backup</button>
+                <button id="importBackupButton" class="button button-secondary" type="button">Import Backup</button>
+                <button id="resetDraftsButton" class="button button-ghost" type="button">Clear Open Drafts</button>
+              </div>
+              <input id="backupFileInput" type="file" accept="application/json" class="hidden" />
+              <div id="backupSnapshot" class="tool-metrics"></div>
+            </section>
+
+            <section class="glass-panel tools-panel premium-subpanel">
+              <div class="panel-header">
+                <h4>Bluetooth Printer</h4>
+                <p class="muted">Load paired Bluetooth printers from Android, save one as default, and optionally print as soon as a table is closed.</p>
+              </div>
+              <label>
+                <span>Paired Printer</span>
+                <select id="printerSelect"></select>
+              </label>
+              <p id="printerStatus" class="muted tool-status">Refresh to load paired Bluetooth printers.</p>
+              <div class="tool-actions two-column-actions">
+                <button id="refreshPrintersButton" class="button button-secondary" type="button">Refresh Printers</button>
+                <button id="testBluetoothPrintButton" class="button" type="button">Send Test Print</button>
+              </div>
+            </section>
+
+            <section class="glass-panel tools-panel premium-subpanel danger-panel">
+              <div class="panel-header">
+                <h4>Danger Zone</h4>
+                <p class="muted">This action removes all saved bill history from this device. Use it only when you have already exported a backup.</p>
+              </div>
+              <button id="clearHistoryButton" class="button button-danger" type="button">Clear Billing History</button>
+            </section>
+          </section>
+
+          <section class="menu-studio">
+            <section class="glass-panel menu-catalog premium-panel">
+              <div class="panel-header split-header">
+                <div>
+                  <p class="eyebrow">Menu Studio</p>
+                  <h4>Dish Library</h4>
+                </div>
+                <button id="newDishButton" class="button button-secondary" type="button">New Dish</button>
+              </div>
+              <div id="menuCatalogMeta" class="menu-catalog-meta"></div>
+              <div id="menuCatalogList" class="menu-catalog-list"></div>
+            </section>
+
+            <section class="glass-panel menu-editor premium-panel">
+              <div class="panel-header">
+                <h4 id="menuEditorTitle">Add a new dish</h4>
+                <p id="menuEditorCaption" class="muted">Build your menu locally. New dishes are available immediately across the floor.</p>
+              </div>
+              <form id="menuEditorForm" class="menu-editor-form">
+                <label>
+                  <span>Dish Code</span>
+                  <input name="code" type="text" maxlength="8" placeholder="501" required />
+                </label>
+                <label>
+                  <span>Dish Name</span>
+                  <input name="name" type="text" maxlength="60" placeholder="Truffle Kulcha" required />
+                </label>
+                <label>
+                  <span>Category</span>
+                  <select name="category" required></select>
+                </label>
+                <label>
+                  <span>Price</span>
+                  <input name="price" type="number" min="0" step="0.01" placeholder="325" required />
+                </label>
+                <label>
+                  <span>Type</span>
+                  <select name="type">
+                    <option value="veg">Veg</option>
+                    <option value="nonveg">Non-Veg</option>
+                  </select>
+                </label>
+                <label class="menu-editor-note">
+                  <span>Short Note</span>
+                  <textarea name="note" rows="4" maxlength="120" placeholder="Creamy, smoky, high-margin signature."></textarea>
+                </label>
+                <div class="menu-editor-actions">
+                  <button type="submit" class="button">Save Dish</button>
+                  <button id="deleteDishButton" type="button" class="button button-ghost">Delete Dish</button>
+                </div>
+              </form>
+            </section>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <nav class="mobile-dock no-print" aria-label="Mobile navigation">
+    <button class="dock-chip is-active" data-view-trigger="floor">Floor</button>
+    <button class="dock-chip" data-view-trigger="summary">Analytics</button>
+    <button class="dock-chip" data-view-trigger="settings">Settings</button>
+  </nav>
+
+  <aside id="orderDrawer" class="order-drawer no-print" aria-label="Order drawer">
+    <div class="drawer-handle"></div>
+    <div class="drawer-header">
+      <div>
+        <p class="eyebrow">Active Check</p>
+        <h3 id="drawerTitle">Select a table</h3>
+      </div>
+      <button id="closeDrawerButton" class="button button-ghost">Close</button>
+    </div>
+
+    <div class="drawer-tabs no-print">
+      <button id="drawerMenuTabButton" class="drawer-tab-chip is-active" type="button">Menu</button>
+      <button id="drawerBillTabButton" class="drawer-tab-chip" type="button">Current Bill</button>
+    </div>
+
+    <div class="drawer-body">
+      <section id="drawerMenuSection" class="drawer-section menu-section">
+        <div class="menu-toolbar">
+          <div class="chip-row" id="categoryChips"></div>
+        </div>
+        <div id="menuList" class="menu-list"></div>
+      </section>
+
+      <section id="drawerBillSection" class="drawer-section check-section hidden">
+        <div id="orderMeta" class="order-meta"></div>
+        <div id="orderItems" class="order-items"></div>
+        <div class="discount-row">
+          <label>
+            <span>Discount</span>
+            <input id="discountInput" type="number" min="0" step="0.01" />
+          </label>
+          <label>
+            <span>Payment</span>
+            <select id="paymentModeSelect">
+              <option value="Cash">Cash</option>
+              <option value="UPI">UPI</option>
+              <option value="Card">Card</option>
+              <option value="Mixed">Mixed</option>
+            </select>
+          </label>
+        </div>
+        <div id="billingSummary" class="billing-summary glass-panel"></div>
+        <div class="drawer-actions">
+          <button id="holdOrderButton" class="button button-ghost">Save Draft</button>
+          <button id="checkoutButton" class="button">Close and Bill</button>
+        </div>
+      </section>
+    </div>
+  </aside>
+
+  <section id="receiptPrintArea" class="receipt-print-area"></section>
+
+  <template id="emptyStateTemplate">
+    <div class="empty-state">
+      <p class="eyebrow">Quiet For Now</p>
+      <h4>No data yet</h4>
+      <p class="muted">Once bills are closed, this view will populate automatically from local storage.</p>
+    </div>
+  </template>
+
+  <script type="module" src="./app/scripts/main.js"></script>
+</body>
+</html>
+
+
+

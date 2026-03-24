@@ -1,0 +1,58 @@
+:root {
+  --bg: #f7f8fa;
+  --bg-elevated: #ffffff;
+  --bg-panel: rgba(255, 255, 255, 0.78);
+  --surface: #ffffff;
+  --surface-muted: #eef1f5;
+  --veg: #a3b18a;
+  --veg-deep: #7f8d69;
+  --nonveg: #e07a5f;
+  --nonveg-deep: #be644c;
+  --action: #2d3142;
+  --action-soft: #46506a;
+  --text: #22273a;
+  --text-secondary: #64748b;
+  --text-faint: #94a3b8;
+  --danger: #b42318;
+  --success: #58714f;
+  --shadow-soft: 0 18px 38px rgba(45, 49, 66, 0.08);
+  --shadow-card: 0 14px 28px rgba(28, 34, 52, 0.06);
+  --shadow-strong: 0 28px 48px rgba(32, 37, 52, 0.16);
+  --radius-sm: 14px;
+  --radius-md: 22px;
+  --radius-lg: 30px;
+  --space-1: 0.35rem;
+  --space-2: 0.65rem;
+  --space-3: 0.95rem;
+  --space-4: 1.25rem;
+  --space-5: 1.6rem;
+  --space-6: 2rem;
+  --space-7: 2.5rem;
+  --font-display: "Aptos", "Segoe UI Variable Display", "Trebuchet MS", sans-serif;
+  --font-body: "Aptos", "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  --rail-width: 18rem;
+  --drawer-width: min(33rem, 48vw);
+  --transition: 180ms ease;
+}
+
+:root[data-glass='clear'] {
+  --bg-panel: rgba(255, 255, 255, 0.92);
+}
+:root[data-theme='dark'] {
+  --bg: #090d14;
+  --bg-elevated: #101722;
+  --bg-panel: rgba(14, 20, 30, 0.9);
+  --surface: #131b27;
+  --surface-muted: #1a2433;
+  --action: #243247;
+  --action-soft: #4f6483;
+  --text: #f7f9fd;
+  --text-secondary: #c8d3e6;
+  --text-faint: #96a6c3;
+  --danger: #ff8c82;
+  --success: #9cc087;
+  --shadow-soft: 0 24px 44px rgba(0, 0, 0, 0.42);
+  --shadow-card: 0 16px 34px rgba(0, 0, 0, 0.36);
+  --shadow-strong: 0 30px 58px rgba(0, 0, 0, 0.52);
+}
+
