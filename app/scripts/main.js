@@ -36,6 +36,9 @@ import {
   startMenuItemCreation,
   saveMenuItemDraft,
   deleteMenuItem,
+  addMenuCategory,
+  removeMenuCategory,
+  closeMenuEditor,
   flushPersistence,
 } from './state/store.js';
 import { renderApp } from './ui/render.js';
@@ -46,6 +49,7 @@ const BACKUP_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 
 const refs = {
   viewTitle: document.getElementById('viewTitle'),
+  topbarSignature: document.getElementById('topbarSignature'),
   statusBar: document.getElementById('statusBar'),
   shiftSnapshot: document.getElementById('shiftSnapshot'),
   tableGrid: document.getElementById('tableGrid'),
@@ -84,6 +88,7 @@ const refs = {
   compareMonthBInput: document.getElementById('compareMonthBInput'),
   dishAnalyticsSelect: document.getElementById('dishAnalyticsSelect'),
   backupSnapshot: document.getElementById('backupSnapshot'),
+  backupCatalogList: document.getElementById('backupCatalogList'),
   setupGstNumberField: document.getElementById('setupGstNumberField'),
   settingsGstNumberField: document.getElementById('settingsGstNumberField'),
   backupStatusText: document.getElementById('backupStatusText'),
@@ -120,10 +125,15 @@ const refs = {
   testBluetoothPrintButton: document.getElementById('testBluetoothPrintButton'),
   menuCatalogList: document.getElementById('menuCatalogList'),
   menuCatalogMeta: document.getElementById('menuCatalogMeta'),
+  categoryForm: document.getElementById('categoryForm'),
+  categoryNameInput: document.getElementById('categoryNameInput'),
+  categoryCatalogList: document.getElementById('categoryCatalogList'),
+  menuEditorModal: document.getElementById('menuEditorModal'),
   menuEditorForm: document.getElementById('menuEditorForm'),
   menuEditorTitle: document.getElementById('menuEditorTitle'),
   menuEditorCaption: document.getElementById('menuEditorCaption'),
   newDishButton: document.getElementById('newDishButton'),
+  closeMenuEditorButton: document.getElementById('closeMenuEditorButton'),
   deleteDishButton: document.getElementById('deleteDishButton'),
   settingsRestaurantName: document.getElementById('settingsRestaurantName'),
   settingsSetupState: document.getElementById('settingsSetupState'),
@@ -150,6 +160,11 @@ let pairedPrinters = [];
 let printerStatusMessage = 'Refresh to load paired Bluetooth printers.';
 let lastMirroredSnapshot = '';
 let activeDrawerTab = 'menu';
+let setupDraftLogoDataUrl = '';
+let pendingLogoTarget = '';
+let storeInitialized = false;
+let storeReadyPromise = Promise.resolve();
+let nativeBackupCatalog = [];
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -178,6 +193,15 @@ function syncDrawerTab() {
   refs.drawerBillTabButton?.classList.toggle('is-active', activeDrawerTab === 'bill');
   refs.drawerMenuSection?.classList.toggle('hidden', activeDrawerTab !== 'menu');
   refs.drawerBillSection?.classList.toggle('hidden', activeDrawerTab !== 'bill');
+}
+
+function focusMenuEditorField(fieldName = 'code') {
+  window.setTimeout(() => {
+    const field = refs.menuEditorForm?.elements?.namedItem(fieldName);
+    if (field && typeof field.focus === 'function') {
+      field.focus();
+    }
+  }, 40);
 }
 
 function focusDrawerForTable(tableId, preferredTab = '') {
@@ -242,6 +266,33 @@ function scheduleLaunchDismiss(force = false) {
   launchDismissTimer = window.setTimeout(dismissLaunchOverlay, 1700);
 }
 
+function markSetupDraftDirty() {
+  refs.setupForm.dataset.dirty = 'true';
+}
+
+function clearSetupDraftState() {
+  refs.setupForm.dataset.dirty = 'false';
+  refs.setupForm.dataset.logoDataUrl = '';
+  setupDraftLogoDataUrl = '';
+}
+
+function captureSetupDraft() {
+  const draftValues = Object.fromEntries(new FormData(refs.setupForm).entries());
+  draftValues.gstEnabled = refs.setupForm.gstEnabled.checked;
+  draftValues.themeMode = refs.setupForm.themeMode.value || 'light';
+  draftValues.restaurantLogoDataUrl = setupDraftLogoDataUrl || refs.setupForm.dataset.logoDataUrl || '';
+  return draftValues;
+}
+
+function updateSetupLogoPreview(dataUrl = '') {
+  setupDraftLogoDataUrl = dataUrl;
+  refs.setupForm.dataset.logoDataUrl = dataUrl;
+  refs.setupLogoPreview.innerHTML = dataUrl
+    ? `<img src="${escapeHtml(dataUrl)}" alt="Restaurant logo preview" class="brand-logo" />`
+    : '<div class="logo-placeholder">Optional logo</div>';
+  markSetupDraftDirty();
+}
+
 function restoreSetupDraft(draftValues) {
   if (!draftValues) return;
   refs.setupForm.restaurantName.value = draftValues.restaurantName ?? '';
@@ -255,7 +306,57 @@ function restoreSetupDraft(draftValues) {
   refs.setupForm.defaultDiscount.value = draftValues.defaultDiscount ?? '';
   refs.setupForm.tableCount.value = draftValues.tableCount ?? '';
   refs.setupForm.themeMode.value = draftValues.themeMode ?? 'light';
+  if (Object.prototype.hasOwnProperty.call(draftValues, 'restaurantLogoDataUrl')) {
+    updateSetupLogoPreview(draftValues.restaurantLogoDataUrl || '');
+  }
 }
+
+function requestLogoSelection(target = 'settings') {
+  pendingLogoTarget = target;
+  if (window.AndroidHost && typeof window.AndroidHost.requestLogoImagePicker === 'function') {
+    const result = window.AndroidHost.requestLogoImagePicker();
+    if (result) {
+      refs.statusBar.textContent = result;
+    }
+    return;
+  }
+
+  if (target === 'setup') {
+    refs.setupLogoFileInput.click();
+    return;
+  }
+
+  refs.logoFileInput.click();
+}
+
+window.addEventListener('native-logo-selected', (event) => {
+  const dataUrl = String(event.detail?.dataUrl || '');
+  if (!dataUrl) {
+    refs.statusBar.textContent = 'No logo image was returned from Android.';
+    pendingLogoTarget = '';
+    return;
+  }
+
+  if (pendingLogoTarget === 'setup') {
+    updateSetupLogoPreview(dataUrl);
+    refs.statusBar.textContent = 'Logo ready. It will be saved when you enter the app.';
+    pendingLogoTarget = '';
+    return;
+  }
+
+  pendingLogoTarget = '';
+  void saveSettings({ restaurantLogoDataUrl: dataUrl })
+    .then(() => syncBrandShortcut())
+    .then(() => {
+      refs.statusBar.textContent = 'Restaurant logo saved locally on this device.';
+    })
+    .catch((error) => reportError(error, 'Unable to save the restaurant logo.'));
+});
+
+window.addEventListener('native-logo-selection-error', (event) => {
+  refs.statusBar.textContent = String(event.detail?.message || 'Unable to read the selected logo image.');
+  pendingLogoTarget = '';
+});
 
 async function syncBrandShortcut() {
   const state = getState();
@@ -278,15 +379,20 @@ async function updateLogoSetting(fileInput, options = {}) {
   const file = fileInput.files?.[0];
   if (!file) return;
   const { preserveSetupDraft = false, previewTarget = null } = options;
-  const draftValues = preserveSetupDraft ? Object.fromEntries(new FormData(refs.setupForm).entries()) : null;
   const dataUrl = await readFileAsDataUrl(file);
+
+  if (preserveSetupDraft) {
+    updateSetupLogoPreview(dataUrl);
+    fileInput.value = '';
+    refs.statusBar.textContent = 'Logo ready. It will be saved when you enter the app.';
+    return;
+  }
 
   if (previewTarget) {
     previewTarget.innerHTML = `<img src="${escapeHtml(dataUrl)}" alt="Restaurant logo preview" class="brand-logo" />`;
   }
 
   await saveSettings({ restaurantLogoDataUrl: dataUrl });
-  restoreSetupDraft(draftValues);
   fileInput.value = '';
   refs.statusBar.textContent = 'Restaurant logo saved locally on this device.';
   await syncBrandShortcut();
@@ -315,7 +421,25 @@ function mirrorSnapshotToNativeCache() {
   }
 }
 
-function triggerPrint(title = 'AMP Restaurant POS Receipt') {
+async function importLatestNativeBackup() {
+  if (!window.AndroidHost || typeof window.AndroidHost.importLatestBackup !== 'function') {
+    return false;
+  }
+
+  const payload = JSON.parse(window.AndroidHost.importLatestBackup());
+  if (payload.status !== 'ok' || !payload.content) {
+    refs.statusBar.textContent = payload.message || 'No automatic backup file was found.';
+    return false;
+  }
+
+  await importSnapshot(JSON.parse(payload.content));
+  dismissLaunchOverlay();
+  renderNativeControls(getState());
+  refs.statusBar.textContent = payload.message || 'Latest backup restored.';
+  return true;
+}
+
+function triggerPrint(title = 'AMP PoS Receipt') {
   const html = refs.receiptPrintArea.innerHTML;
   if (!html) {
     refs.statusBar.textContent = 'No receipt content is ready for printing yet.';
@@ -400,9 +524,60 @@ function markBackupSaved() {
   renderNativeControls(getState());
 }
 
-function saveExternalBackup(manual = false) {
+function snapshotHasMeaningfulData(snapshot) {
+  return Boolean(snapshot?.settings?.restaurantName?.trim())
+    || Boolean(snapshot?.billHistory?.length)
+    || Boolean(snapshot?.tables?.some((table) => table.order?.items?.length));
+}
+
+function buildBackupFilename(reason = 'manual') {
+  const stamp = new Date().toISOString().replaceAll(':', '-').replaceAll('.', '-');
+  return `ken-pos-backup-${stamp}-${reason}.json`;
+}
+
+function parseBackupCatalog(raw) {
+  if (!raw) {
+    return { status: 'empty', message: 'No backup response received.', backups: [] };
+  }
+
+  try {
+    const payload = JSON.parse(raw);
+    return {
+      status: payload.status || 'ok',
+      message: payload.message || '',
+      backups: Array.isArray(payload.backups) ? payload.backups : [],
+    };
+  } catch {
+    return { status: 'error', message: String(raw), backups: [] };
+  }
+}
+
+async function refreshBackupCatalog() {
+  if (!window.AndroidHost || typeof window.AndroidHost.listBackupCatalog !== 'function') {
+    nativeBackupCatalog = [];
+    renderNativeControls(getState());
+    return;
+  }
+
+  const payload = parseBackupCatalog(window.AndroidHost.listBackupCatalog());
+  nativeBackupCatalog = payload.backups;
+  renderNativeControls(getState());
+}
+
+function saveExternalBackup(options = {}) {
+  const {
+    filename = '',
+    mirrorLatest = false,
+    quiet = false,
+  } = options;
   const snapshot = exportSnapshot();
-  const filename = manual ? `ken-pos-backup-${snapshot.exportedAt.slice(0, 10)}.json` : 'ken-pos-backup-latest.json';
+  if (!snapshotHasMeaningfulData(snapshot)) {
+    if (!quiet) {
+      refs.statusBar.textContent = 'Backup skipped because this workstation does not have meaningful local data yet.';
+    }
+    return false;
+  }
+
   const content = JSON.stringify(snapshot, null, 2);
 
   if (window.AndroidHost && typeof window.AndroidHost.cacheBackupSnapshot === 'function') {
@@ -410,27 +585,80 @@ function saveExternalBackup(manual = false) {
   }
 
   if (window.AndroidHost && typeof window.AndroidHost.saveExternalBackup === 'function') {
-    const result = window.AndroidHost.saveExternalBackup(content, filename);
-    refs.statusBar.textContent = result || 'Backup saved to device downloads.';
+    let result = '';
+    if (mirrorLatest) {
+      result = window.AndroidHost.saveExternalBackup(content, 'ken-pos-backup-latest.json') || result;
+    }
+    if (filename) {
+      result = window.AndroidHost.saveExternalBackup(content, filename) || result;
+    }
+    if (!filename && !mirrorLatest) {
+      result = window.AndroidHost.saveExternalBackup(content, 'ken-pos-backup-latest.json') || result;
+    }
+    if (!quiet) {
+      refs.statusBar.textContent = result || 'Backup saved to device downloads.';
+    }
     markBackupSaved();
-    return;
+    void refreshBackupCatalog();
+    return true;
   }
 
-  downloadTextFile(filename, content);
-  refs.statusBar.textContent = 'Backup exported from this browser.';
+  const downloadName = filename || 'ken-pos-backup-latest.json';
+  downloadTextFile(downloadName, content);
+  if (!quiet) {
+    refs.statusBar.textContent = 'Backup exported from this browser.';
+  }
   markBackupSaved();
+  return true;
+}
+
+async function importNamedNativeBackup(filename) {
+  if (!window.AndroidHost || typeof window.AndroidHost.importBackupByName !== 'function') {
+    return false;
+  }
+
+  const payload = JSON.parse(window.AndroidHost.importBackupByName(filename));
+  if (payload.status !== 'ok' || !payload.content) {
+    refs.statusBar.textContent = payload.message || 'The selected backup could not be loaded.';
+    return false;
+  }
+
+  await importSnapshot(JSON.parse(payload.content));
+  dismissLaunchOverlay();
+  renderNativeControls(getState());
+  refs.statusBar.textContent = payload.message || `Backup restored from ${filename}.`;
+  void refreshBackupCatalog();
+  return true;
 }
 
 function maybeRunAutomaticBackup(reason = 'scheduled') {
   if (!window.AndroidHost || typeof window.AndroidHost.saveExternalBackup !== 'function') return;
   const state = getState();
   if (!state.ready) return;
+
+  const immediateReasons = new Set(['bill-close', 'settings', 'setup']);
+  if (immediateReasons.has(reason)) {
+    try {
+      saveExternalBackup({
+        filename: buildBackupFilename(reason),
+        mirrorLatest: true,
+        quiet: reason !== 'bill-close',
+      });
+      if (reason === 'bill-close') {
+        refs.statusBar.textContent = 'Bill closed and backup archived locally in Downloads/KenPoS.';
+      }
+    } catch (error) {
+      console.warn('Immediate backup failed', error);
+    }
+    return;
+  }
+
   const lastBackupAt = getKnownBackupAt();
   const elapsed = lastBackupAt ? Date.now() - new Date(lastBackupAt).getTime() : Number.POSITIVE_INFINITY;
   if (elapsed < AUTO_BACKUP_INTERVAL_MS) return;
 
   try {
-    saveExternalBackup(false);
+    saveExternalBackup({ mirrorLatest: true, quiet: true });
     if (reason !== 'manual') {
       refs.statusBar.textContent = 'Automatic backup refreshed in device downloads.';
     }
@@ -438,7 +666,6 @@ function maybeRunAutomaticBackup(reason = 'scheduled') {
     console.warn('Automatic backup failed', error);
   }
 }
-
 function parsePrinterPayload(raw) {
   if (!raw) {
     return { status: 'empty', message: 'No printer response received.', printers: [] };
@@ -470,8 +697,23 @@ function getKnownBackupAt() {
 function renderNativeControls(state) {
   const lastBackupAt = getKnownBackupAt();
   refs.backupStatusText.textContent = lastBackupAt
-    ? `Latest automatic backup: ${new Date(lastBackupAt).toLocaleString()}. The newest file is kept in Downloads/KenPoS.`
-    : 'Automatic backup stores the latest local database snapshot in Downloads/KenPoS once every 24 hours.';
+    ? `Latest automatic backup: ${new Date(lastBackupAt).toLocaleString()}. Timestamped archives are kept in Downloads/KenPoS.`
+    : 'Automatic backup stores the latest local database snapshot in Downloads/KenPoS once every 24 hours. Timestamped archives are created on bill close and key setup changes.';
+
+  refs.backupCatalogList.innerHTML = nativeBackupCatalog.length
+    ? nativeBackupCatalog.map((entry) => `
+        <article class="backup-entry premium-subpanel">
+          <div>
+            <small>${escapeHtml(entry.modifiedAt ? new Date(entry.modifiedAt).toLocaleString() : 'Unknown time')} · ${escapeHtml(entry.sizeLabel || '')}</small>
+            <h4>${escapeHtml(entry.name)}</h4>
+          </div>
+          <div class="backup-entry-actions">
+            ${entry.latest ? '<span class="setup-state-pill">Latest</span>' : ''}
+            <button class="button button-ghost" type="button" data-restore-backup="${escapeHtml(entry.name)}">Restore</button>
+          </div>
+        </article>
+      `).join('')
+    : '<div class="empty-state"><h4>No backups listed</h4><p class="muted">Create a backup or wait for the next automatic archive to populate Downloads/KenPoS.</p></div>';
 
   const selectedAddress = state.settings.preferredPrinterAddress || '';
   const printerOptions = ['<option value="">System print / none selected</option>']
@@ -599,24 +841,74 @@ function bindSettings() {
   }, 'Unable to save restaurant settings.'));
 
   refs.settingsForm.gstEnabled.addEventListener('change', () => updateGstFieldState(refs.settingsForm, refs.settingsGstNumberField));
-  refs.uploadLogoButton.addEventListener('click', () => refs.logoFileInput.click());
+  refs.uploadLogoButton.addEventListener('click', () => requestLogoSelection('settings'));
   refs.logoFileInput.addEventListener('change', safely(async () => updateLogoSetting(refs.logoFileInput, { previewTarget: refs.logoPreview }), 'Unable to save the restaurant logo.'));
   refs.clearLogoButton.addEventListener('click', safely(async () => {
     await saveSettings({ restaurantLogoDataUrl: '' });
     refs.statusBar.textContent = 'Restaurant logo removed from local branding.';
   }, 'Unable to remove the restaurant logo.'));
 
-  refs.exportBackupButton.addEventListener('click', () => saveExternalBackup(true));
+  refs.categoryForm.addEventListener('submit', safely(async (event) => {
+    event.preventDefault();
+    await addMenuCategory(refs.categoryNameInput.value);
+    refs.categoryForm.reset();
+    refs.categoryNameInput.focus();
+  }, 'Unable to add this food category.'));
 
-  refs.importBackupButton.addEventListener('click', () => refs.backupFileInput.click());
+  refs.categoryCatalogList.addEventListener('click', safely(async (event) => {
+    const trigger = event.target.closest('[data-delete-category]');
+    if (!trigger) return;
+    if (!window.confirm(`Delete ${trigger.dataset.deleteCategory} from the category library?`)) return;
+    await removeMenuCategory(trigger.dataset.deleteCategory);
+  }, 'Unable to delete this food category.'));
+
+  refs.exportBackupButton.addEventListener('click', () => saveExternalBackup({
+    filename: buildBackupFilename('manual'),
+    mirrorLatest: true,
+  }));
+
+  refs.refreshBackupCatalogButton?.addEventListener('click', () => {
+    void refreshBackupCatalog();
+  });
+
+  refs.importBackupButton.addEventListener('click', safely(async () => {
+    const confirmed = window.confirm('Importing a backup file will wipe the current local menu, tables, drafts, and bill history on this device, then fully restore the selected backup. Continue?');
+    if (!confirmed) return;
+    refs.backupFileInput.click();
+  }, 'Unable to start backup import.'));
+
+  refs.restoreLatestBackupButton?.addEventListener('click', safely(async () => {
+    const confirmed = window.confirm('Restoring the latest automatic backup will wipe the current local menu, tables, drafts, and bill history on this device, then fully restore the latest backup from Downloads/KenPoS. Continue?');
+    if (!confirmed) return;
+    const handled = await importLatestNativeBackup();
+    if (!handled) {
+      refs.statusBar.textContent = 'No automatic backup was restored from Downloads/KenPoS. Use Import Backup File or the backup list to restore another snapshot.';
+    }
+  }, 'Unable to restore the latest automatic backup.'));
+
+  refs.backupCatalogList?.addEventListener('click', safely(async (event) => {
+    const trigger = event.target.closest('[data-restore-backup]');
+    if (!trigger) return;
+    const fileName = trigger.dataset.restoreBackup;
+    const confirmed = window.confirm(`Restoring ${fileName} will wipe the current local menu, tables, drafts, and bill history on this device, then fully restore that backup. Continue?`);
+    if (!confirmed) return;
+    await importNamedNativeBackup(fileName);
+  }, 'Unable to restore the selected backup.'));
+
   refs.backupFileInput.addEventListener('change', safely(async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    const confirmed = window.confirm('Importing a backup will wipe the current local menu, tables, drafts, and bill history on this device, then fully restore the selected backup. Continue?');
+    if (!confirmed) {
+      refs.backupFileInput.value = '';
+      return;
+    }
     const text = await file.text();
     await importSnapshot(JSON.parse(text));
     refs.backupFileInput.value = '';
-    scheduleLaunchDismiss(true);
+    dismissLaunchOverlay();
     renderNativeControls(getState());
+    void refreshBackupCatalog();
   }, 'Unable to import the backup.'));
 
   refs.resetDraftsButton.addEventListener('click', safely(async () => {
@@ -646,16 +938,17 @@ function bindSettings() {
     refs.statusBar.textContent = 'Open a draft or historical receipt before sending a test print.';
   });
 }
-
 function bindRestaurantSetup() {
+  refs.setupForm.addEventListener('input', () => markSetupDraftDirty());
+  refs.setupForm.addEventListener('change', () => markSetupDraftDirty());
+
   refs.setupForm.addEventListener('submit', safely(async (event) => {
     event.preventDefault();
-    if (!getState().ready) {
-      refs.statusBar.textContent = 'Preparing local workstation. Please wait a moment and try again.';
-      return;
-    }
-    const formData = new FormData(refs.setupForm);
-    await completeRestaurantSetup(Object.fromEntries(formData.entries()));
+    refs.statusBar.textContent = 'Finalizing local workstation setup...';
+    await storeReadyPromise.catch(() => undefined);
+    const setupValues = captureSetupDraft();
+    await completeRestaurantSetup(setupValues);
+    clearSetupDraftState();
     await syncBrandShortcut();
     setView('floor');
     dismissLaunchOverlay();
@@ -663,15 +956,13 @@ function bindRestaurantSetup() {
   }, 'Unable to complete restaurant setup.'));
 
   refs.setupForm.gstEnabled.addEventListener('change', () => updateGstFieldState(refs.setupForm, refs.setupGstNumberField));
-  refs.setupUploadLogoButton.addEventListener('click', () => refs.setupLogoFileInput.click());
+  refs.setupUploadLogoButton.addEventListener('click', () => requestLogoSelection('setup'));
   refs.setupLogoFileInput.addEventListener('change', safely(async () => updateLogoSetting(refs.setupLogoFileInput, {
     preserveSetupDraft: true,
     previewTarget: refs.setupLogoPreview,
   }), 'Unable to save the setup logo.'));
   refs.setupClearLogoButton.addEventListener('click', safely(async () => {
-    const draftValues = Object.fromEntries(new FormData(refs.setupForm).entries());
-    await saveSettings({ restaurantLogoDataUrl: '' });
-    restoreSetupDraft(draftValues);
+    updateSetupLogoPreview('');
     refs.statusBar.textContent = 'Setup logo cleared.';
   }, 'Unable to clear the setup logo.'));
 }
@@ -681,9 +972,25 @@ function bindMenuManagement() {
     const trigger = event.target.closest('[data-menu-editor-id]');
     if (!trigger) return;
     selectMenuEditorItem(trigger.dataset.menuEditorId);
+    focusMenuEditorField('name');
   });
 
-  refs.newDishButton.addEventListener('click', () => startMenuItemCreation());
+  refs.newDishButton.addEventListener('click', () => {
+    startMenuItemCreation();
+    focusMenuEditorField('code');
+  });
+
+  refs.closeMenuEditorButton.addEventListener('click', () => closeMenuEditor());
+  refs.menuEditorModal.addEventListener('click', (event) => {
+    if (event.target === refs.menuEditorModal) {
+      closeMenuEditor();
+    }
+  });
+  window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !refs.menuEditorModal.classList.contains('hidden')) {
+      closeMenuEditor();
+    }
+  });
 
   refs.menuEditorForm.addEventListener('submit', safely(async (event) => {
     event.preventDefault();
@@ -696,7 +1003,6 @@ function bindMenuManagement() {
     await deleteMenuItem();
   }, 'Unable to delete this dish.'));
 }
-
 function bindSummaryActions() {
   refs.billHistory.addEventListener('click', (event) => {
     const trigger = event.target.closest('[data-receipt-id]');
@@ -721,7 +1027,7 @@ function bindUtilityActions() {
   refs.drawerMenuTabButton?.addEventListener('click', () => setDrawerTab('menu'));
   refs.drawerBillTabButton?.addEventListener('click', () => setDrawerTab('bill'));
   refs.clearMoveModeButton.addEventListener('click', () => clearMoveOrder());
-  refs.printReceiptButton.addEventListener('click', () => printActiveReceipt());
+  refs.printReceiptButton?.addEventListener('click', () => printActiveReceipt());
   refs.printSummaryButton?.addEventListener('click', () => printActiveReceipt());
   refs.launchDismissButton.addEventListener('click', () => dismissLaunchOverlay());
 }
@@ -819,7 +1125,8 @@ bindLifecyclePersistence();
 bindGlobalErrorHandlers();
 bindTableInteractions();
 
-initializeStore().then(() => {
+storeReadyPromise = initializeStore().then(() => {
+  storeInitialized = true;
   scheduleLaunchDismiss(true);
   renderNativeControls(getState());
   refreshBluetoothPrinters();
@@ -832,6 +1139,19 @@ initializeStore().then(() => {
 });
 
 registerServiceWorker();
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

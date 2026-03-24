@@ -9,6 +9,7 @@ import {
   replaceStoredBillHistory,
   replaceAppSnapshot,
   DEFAULT_SETTINGS,
+  DEFAULT_MENU,
   buildDefaultTables,
   writeRecoverySnapshot,
 } from '../data/repository.js';
@@ -38,6 +39,7 @@ const state = {
   billHistory: [],
   selectedTableId: null,
   selectedMenuEditorId: null,
+  menuEditorOpen: false,
   category: 'All',
   floorFilter: 'all',
   search: '',
@@ -56,6 +58,7 @@ const state = {
 };
 
 let persistenceQueue = Promise.resolve();
+const PERSISTENCE_TIMEOUT_MS = 2500;
 
 function cloneState() {
   return structuredClone(state);
@@ -102,6 +105,27 @@ function defaultSeatsForIndex(index) {
   return index < 6 ? 4 : 6;
 }
 
+function normalizeCategoryList(categories, fallback = DEFAULT_SETTINGS.categories) {
+  const source = Array.isArray(categories) ? categories : Array.isArray(fallback) ? fallback : DEFAULT_SETTINGS.categories;
+  const normalized = [];
+
+  source.forEach((entry) => {
+    const value = String(entry || '').trim();
+    if (value && !normalized.some((current) => current.localeCompare(value, undefined, { sensitivity: 'base' }) === 0)) {
+      normalized.push(value);
+    }
+  });
+
+  return normalized.length ? normalized : [...DEFAULT_SETTINGS.categories];
+}
+
+function getAvailableCategories() {
+  return normalizeCategoryList([
+    ...(state.settings.categories || []),
+    ...state.menu.map((item) => item.category),
+  ]);
+}
+
 function normalizeSettings(nextSettings = {}) {
   const current = state.settings;
   const merged = { ...current, ...nextSettings };
@@ -131,6 +155,7 @@ function normalizeSettings(nextSettings = {}) {
     preferredPrinterName: String(merged.preferredPrinterName || current.preferredPrinterName || ''),
     floorCardMode: merged.floorCardMode === 'compact' ? 'compact' : 'detail',
     menuCardMode: merged.menuCardMode === 'compact' ? 'compact' : 'detail',
+    categories: normalizeCategoryList(Array.isArray(merged.categories) ? merged.categories : current.categories, current.categories),
     restaurantLogoDataUrl: String(merged.restaurantLogoDataUrl || ''),
     setupCompletedAt: String(merged.setupCompletedAt || current.setupCompletedAt || ''),
     tableCount: Object.prototype.hasOwnProperty.call(nextSettings, 'tableCount')
@@ -176,17 +201,26 @@ function buildRuntimeSnapshot() {
   };
 }
 
+function withPersistenceTimeout(work) {
+  return Promise.race([
+    Promise.resolve().then(work),
+    new Promise((_, reject) => {
+      window.setTimeout(() => reject(new Error('Local storage sync timed out. Recovery mode is still active.')), PERSISTENCE_TIMEOUT_MS);
+    }),
+  ]);
+}
+
 function queuePersistence(work) {
   const snapshot = buildRuntimeSnapshot();
   writeRecoverySnapshot(snapshot);
   persistenceQueue = persistenceQueue
     .catch(() => undefined)
-    .then(() => work(snapshot))
+    .then(() => withPersistenceTimeout(() => work(snapshot)))
     .catch((error) => {
       console.error(error);
-      updateStatus('Local save failed. Your last change is kept in recovery data.');
+      updateStatus('Saved in local recovery mode. IndexedDB sync can retry later.');
       emit();
-      throw error;
+      return false;
     });
   return persistenceQueue;
 }
@@ -264,11 +298,25 @@ export async function flushPersistence() {
 }
 
 export async function initializeStore() {
-  const data = await bootstrapAppData();
+  const fallback = {
+    tables: buildDefaultTables(DEFAULT_SETTINGS.tableCount),
+    menu: structuredClone(DEFAULT_MENU),
+    settings: { ...DEFAULT_SETTINGS },
+    billHistory: [],
+  };
+
+  const data = await Promise.race([
+    bootstrapAppData(),
+    new Promise((resolve) => {
+      window.setTimeout(() => resolve(fallback), 1800);
+    }),
+  ]);
+
   state.tables = data.tables;
   state.menu = data.menu;
   state.settings = data.settings;
   state.billHistory = data.billHistory;
+  state.settings.categories = getAvailableCategories();
   state.ready = true;
   state.selectedMenuEditorId = state.menu[0]?.id ?? null;
   updateStatus(hasRestaurantSetup()
@@ -490,7 +538,13 @@ export async function setPaymentMode(paymentMode) {
 export async function saveSettings(nextSettings) {
   const nextNormalized = normalizeSettings(nextSettings);
   const previousTableCount = state.settings.tableCount;
-  state.settings = nextNormalized;
+  state.settings = {
+    ...nextNormalized,
+    categories: normalizeCategoryList([
+      ...(nextNormalized.categories || []),
+      ...state.menu.map((item) => item.category),
+    ]),
+  };
 
   if (nextNormalized.tableCount !== previousTableCount) {
     resizeTables(nextNormalized.tableCount);
@@ -512,7 +566,13 @@ export async function completeRestaurantSetup(setupValues) {
   if (!nextSettings.restaurantName) {
     throw new Error('Restaurant name is required to complete setup.');
   }
-  state.settings = nextSettings;
+  state.settings = {
+    ...nextSettings,
+    categories: normalizeCategoryList([
+      ...(nextSettings.categories || []),
+      ...state.menu.map((item) => item.category),
+    ]),
+  };
   if (getNumberedTables().length !== nextSettings.tableCount) {
     resizeTables(nextSettings.tableCount);
   }
@@ -526,6 +586,7 @@ export async function completeRestaurantSetup(setupValues) {
 
 export function selectMenuEditorItem(itemId) {
   state.selectedMenuEditorId = itemId;
+  state.menuEditorOpen = true;
   state.view = 'settings';
   updateStatus('Dish editor is ready. Changes stay local until you save.');
   emit();
@@ -533,8 +594,14 @@ export function selectMenuEditorItem(itemId) {
 
 export function startMenuItemCreation() {
   state.selectedMenuEditorId = null;
+  state.menuEditorOpen = true;
   state.view = 'settings';
   updateStatus('Create a new dish for this workstation.');
+  emit();
+}
+
+export function closeMenuEditor() {
+  state.menuEditorOpen = false;
   emit();
 }
 
@@ -555,6 +622,7 @@ export async function saveMenuItemDraft(draft) {
   }
 
   state.selectedMenuEditorId = normalized.id;
+  state.menuEditorOpen = true;
   await saveMenu();
   emit();
 }
@@ -569,8 +637,43 @@ export async function deleteMenuItem(itemId = state.selectedMenuEditorId) {
 
   state.menu = state.menu.filter((item) => item.id !== menuItem.id);
   state.selectedMenuEditorId = state.menu[0]?.id ?? null;
+  state.menuEditorOpen = false;
   await saveMenu();
   updateStatus(`${menuItem.name} removed from the local menu.`);
+  emit();
+}
+
+export async function addMenuCategory(categoryName) {
+  const normalizedName = String(categoryName || '').trim();
+  if (!normalizedName) {
+    throw new Error('Category name is required.');
+  }
+
+  if (getAvailableCategories().some((category) => category.localeCompare(normalizedName, undefined, { sensitivity: 'base' }) === 0)) {
+    throw new Error(`${normalizedName} already exists.`);
+  }
+
+  state.settings.categories = [...(state.settings.categories || []), normalizedName];
+  await saveSettingsOnly();
+  updateStatus(`${normalizedName} added to the category library.`);
+  emit();
+}
+
+export async function removeMenuCategory(categoryName) {
+  const normalizedName = String(categoryName || '').trim();
+  if (!normalizedName) return;
+
+  const hasItems = state.menu.some((item) => item.category === normalizedName);
+  if (hasItems) {
+    throw new Error('Move dishes out of this category before deleting it.');
+  }
+
+  state.settings.categories = (state.settings.categories || []).filter((category) => category !== normalizedName);
+  if (state.category === normalizedName) {
+    state.category = 'All';
+  }
+  await saveSettingsOnly();
+  updateStatus(`${normalizedName} removed from the category library.`);
   emit();
 }
 
@@ -672,8 +775,10 @@ export async function importSnapshot(snapshot) {
   state.billHistory = normalized.billHistory.sort((a, b) => new Date(b.closedAt) - new Date(a.closedAt));
   state.selectedTableId = null;
   state.selectedMenuEditorId = state.menu[0]?.id ?? null;
+  state.menuEditorOpen = false;
   state.activeReceipt = null;
   state.view = 'floor';
+  state.settings.categories = getAvailableCategories();
   updateStatus('Backup imported successfully. Local workstation state restored.');
   emit();
 }
@@ -681,6 +786,10 @@ export async function importSnapshot(snapshot) {
 export function getState() {
   return cloneState();
 }
+
+
+
+
 
 
 

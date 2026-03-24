@@ -73,6 +73,14 @@ function getFilteredMenu(menu, search, category) {
   });
 }
 
+function getAvailableCategories(state) {
+  const base = Array.isArray(state.settings.categories) ? state.settings.categories : [];
+  const categories = [...base, ...state.menu.map((item) => item.category)];
+  return categories
+    .map((category) => String(category || '').trim())
+    .filter((category, index, values) => category && values.findIndex((entry) => entry.localeCompare(category, undefined, { sensitivity: 'base' }) === 0) === index);
+}
+
 function getVisibleTables(tables, filter) {
   if (filter === 'active') return tables.filter((table) => table.order?.items?.length);
   if (filter === 'available') return tables.filter((table) => !table.order?.items?.length);
@@ -147,48 +155,65 @@ function buildReceiptMarkup(receipt) {
 }
 
 function renderLaunch(state, refs) {
-  const restaurantName = state.settings.restaurantName || 'Your Restaurant';
   const hasSetup = Boolean(state.settings.restaurantName.trim());
-  const isReady = Boolean(state.ready);
+  const preserveDraft = !hasSetup && (
+    refs.setupForm?.dataset?.dirty === 'true'
+    || Boolean(refs.setupForm?.restaurantName?.value || refs.setupForm?.receiptFooter?.value || refs.setupForm?.dataset?.logoDataUrl)
+  );
+  const draftValues = preserveDraft
+    ? {
+        restaurantName: refs.setupForm.restaurantName.value,
+        receiptFooter: refs.setupForm.receiptFooter.value,
+        serviceChargeRate: refs.setupForm.serviceChargeRate.value,
+        gstEnabled: refs.setupForm.gstEnabled.checked,
+        gstRate: refs.setupForm.gstRate.value,
+        gstNumber: refs.setupForm.gstNumber.value,
+        defaultDiscount: refs.setupForm.defaultDiscount.value,
+        tableCount: refs.setupForm.tableCount.value,
+        themeMode: refs.setupForm.themeMode.value || 'light',
+        restaurantLogoDataUrl: refs.setupForm.dataset.logoDataUrl || '',
+      }
+    : state.settings;
+  const restaurantName = (hasSetup ? state.settings.restaurantName : draftValues.restaurantName) || 'Your Restaurant';
+  const effectiveLogo = hasSetup ? state.settings.restaurantLogoDataUrl : draftValues.restaurantLogoDataUrl;
   refs.launchOverlay.dataset.mode = hasSetup ? 'welcome' : 'setup';
-  refs.launchOverlay.dataset.ready = isReady ? 'true' : 'false';
-  refs.launchTitle.textContent = hasSetup ? restaurantName : isReady ? 'Set up your restaurant' : 'Preparing workstation';
+  refs.launchOverlay.dataset.ready = state.ready ? 'true' : 'false';
+  refs.launchTitle.textContent = hasSetup ? restaurantName : 'Set up your restaurant';
   refs.launchCopy.textContent = hasSetup
     ? 'Built by Gurman Singh for'
-    : isReady
-      ? 'Add your restaurant identity once. You can change everything later in Settings.'
-      : 'Loading local tables, menu, and settings from this device.';
+    : 'Add your restaurant identity once. You can change everything later in Settings.';
   refs.launchRestaurantInline.textContent = restaurantName;
   refs.launchWelcomePanel.classList.toggle('hidden', !hasSetup);
   refs.launchSetupPanel.classList.toggle('hidden', hasSetup);
   refs.launchDismissButton.classList.toggle('hidden', !hasSetup);
   refs.launchDismissButton.textContent = hasSetup ? 'Start Service' : 'Continue';
-  [...refs.setupForm.elements].forEach((field) => {
-    if ('disabled' in field) {
-      field.disabled = !isReady;
-    }
-  });
-  refs.launchLogo.innerHTML = state.settings.restaurantLogoDataUrl
-    ? logoMarkup(state.settings.restaurantLogoDataUrl, `${restaurantName} logo`, 'launch-logo-image')
+  const setupSubmitButton = refs.setupForm.querySelector('button[type="submit"]');
+  if (setupSubmitButton) {
+    setupSubmitButton.disabled = false;
+    setupSubmitButton.textContent = 'Save and Enter';
+  }
+  refs.launchLogo.innerHTML = effectiveLogo
+    ? logoMarkup(effectiveLogo, `${restaurantName} logo`, 'launch-logo-image')
     : '<span>K</span>';
-  refs.setupForm.restaurantName.value = state.settings.restaurantName;
-  refs.setupForm.receiptFooter.value = state.settings.receiptFooter;
-  refs.setupForm.serviceChargeRate.value = state.settings.serviceChargeRate;
-  refs.setupForm.gstEnabled.checked = Boolean(state.settings.gstEnabled);
-  refs.setupForm.gstRate.value = state.settings.gstRate;
-  refs.setupForm.gstNumber.value = state.settings.gstNumber;
-  refs.setupForm.gstNumber.required = Boolean(state.settings.gstEnabled);
-  refs.setupGstNumberField.classList.toggle('hidden', !state.settings.gstEnabled);
-  refs.setupForm.defaultDiscount.value = state.settings.defaultDiscount;
-  refs.setupForm.tableCount.value = state.settings.tableCount;
-  refs.setupForm.themeMode.value = state.settings.themeMode;
-  refs.setupLogoPreview.innerHTML = state.settings.restaurantLogoDataUrl
-    ? logoMarkup(state.settings.restaurantLogoDataUrl, `${restaurantName} logo`, 'brand-logo')
+  refs.setupForm.restaurantName.value = draftValues.restaurantName ?? '';
+  refs.setupForm.receiptFooter.value = draftValues.receiptFooter ?? '';
+  refs.setupForm.serviceChargeRate.value = draftValues.serviceChargeRate ?? state.settings.serviceChargeRate;
+  refs.setupForm.gstEnabled.checked = Boolean(draftValues.gstEnabled);
+  refs.setupForm.gstRate.value = draftValues.gstRate ?? state.settings.gstRate;
+  refs.setupForm.gstNumber.value = draftValues.gstNumber ?? '';
+  refs.setupForm.gstNumber.required = Boolean(draftValues.gstEnabled);
+  refs.setupGstNumberField.classList.toggle('hidden', !draftValues.gstEnabled);
+  refs.setupForm.defaultDiscount.value = draftValues.defaultDiscount ?? state.settings.defaultDiscount;
+  refs.setupForm.tableCount.value = draftValues.tableCount ?? state.settings.tableCount;
+  refs.setupForm.themeMode.value = draftValues.themeMode ?? state.settings.themeMode;
+  refs.setupForm.dataset.logoDataUrl = effectiveLogo || '';
+  refs.setupLogoPreview.innerHTML = effectiveLogo
+    ? logoMarkup(effectiveLogo, `${restaurantName} logo`, 'brand-logo')
     : '<div class="logo-placeholder">Optional logo</div>';
 }
 
 function renderBranding(state, refs) {
-  const restaurantName = state.settings.restaurantName || 'AMP Restaurant POS';
+  const restaurantName = state.settings.restaurantName || 'AMP PoS';
   refs.brandRestaurantName.textContent = restaurantName;
   refs.brandRestaurantMeta.textContent = state.settings.restaurantName
     ? 'Calm service flow for busy shifts.'
@@ -197,6 +222,7 @@ function renderBranding(state, refs) {
   refs.floorHeroSubtitle.textContent = state.settings.restaurantName
     ? 'Royal floor control with locally saved drafts, bills, and printer-ready receipts.'
     : 'Complete setup to add your restaurant identity, floor size, and billing defaults.';
+  refs.topbarSignature.textContent = `AMP x ${restaurantName}`;
 }
 
 function renderShiftSnapshot(state, refs) {
@@ -310,7 +336,7 @@ function renderTables(state, refs) {
 }
 
 function renderMenu(state, refs) {
-  const categories = ['All', ...new Set(state.menu.map((item) => item.category))];
+  const categories = ['All', ...getAvailableCategories(state)];
   const compactMode = state.settings.menuCardMode === 'compact';
   refs.toggleMenuCardModeButton.textContent = compactMode ? 'Detailed Menu' : 'Compact Menu';
   refs.categoryChips.innerHTML = categories.map((category) => `
@@ -322,11 +348,13 @@ function renderMenu(state, refs) {
   refs.menuList.innerHTML = filtered.length ? filtered.map((item) => {
     if (compactMode) {
       return `
-        <article class="menu-card menu-card-compact">
+        <article class="menu-card menu-card-compact ${item.type}">
+          <div class="compact-menu-topline">${escapeHtml(item.code)}</div>
           <div class="compact-menu-name">${escapeHtml(item.name)}</div>
           <div class="compact-menu-price">${formatCurrency(item.price)}</div>
           <div class="compact-menu-meta">
-            <span class="badge ${item.type}">${item.type === 'veg' ? 'Veg' : 'Non-Veg'}</span>
+            <span class="compact-menu-type">${item.type === 'veg' ? 'Veg' : 'Non-Veg'}</span>
+            <span class="compact-menu-category">${escapeHtml(item.category)}</span>
           </div>
           <button class="add-button compact-add-button" data-add-item="${item.id}">Add</button>
         </article>
@@ -594,6 +622,9 @@ function renderSettings(state, refs) {
   refs.settingsForm.autoPrintOnClose.checked = Boolean(state.settings.autoPrintOnClose);
   document.documentElement.dataset.glass = state.settings.glassMode;
   document.documentElement.dataset.theme = state.settings.themeMode;
+  document.body.classList.toggle('menu-editor-open', Boolean(state.menuEditorOpen));
+  refs.menuEditorModal.classList.toggle('hidden', !state.menuEditorOpen);
+  refs.menuEditorModal.setAttribute('aria-hidden', state.menuEditorOpen ? 'false' : 'true');
 
   refs.settingsRestaurantName.textContent = restaurantName;
   refs.settingsSetupState.textContent = state.settings.setupCompletedAt ? 'Configured' : 'Needs setup';
@@ -613,11 +644,29 @@ function renderSettings(state, refs) {
     <div class="shift-item"><span class="muted">Tables</span><strong>${state.settings.tableCount}</strong></div>
   `;
 
-  const categories = [...new Set(state.menu.map((item) => item.category).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const categories = getAvailableCategories(state).sort((a, b) => a.localeCompare(b));
+  const categoryUsage = categories.map((category) => ({
+    name: category,
+    count: state.menu.filter((item) => item.category === category).length,
+  }));
+
   refs.menuCatalogMeta.innerHTML = `
     <span>${state.menu.length} dishes</span>
     <span>${categories.length} categories</span>
   `;
+
+  refs.categoryCatalogList.innerHTML = categoryUsage.length ? categoryUsage.map((entry) => `
+    <article class="category-admin-row premium-subpanel">
+      <div>
+        <small>${entry.count ? `${entry.count} dishes assigned` : 'No dishes assigned'}</small>
+        <h4>${escapeHtml(entry.name)}</h4>
+      </div>
+      <div class="category-admin-meta">
+        <strong>${entry.count}</strong>
+        <button class="button button-ghost category-admin-delete" type="button" data-delete-category="${escapeHtml(entry.name)}" ${entry.count ? 'disabled' : ''}>Delete</button>
+      </div>
+    </article>
+  `).join('') : refs.emptyStateTemplate.innerHTML;
 
   refs.menuCatalogList.innerHTML = state.menu.length ? state.menu.map((item) => `
     <button class="menu-admin-row ${selectedMenuItem?.id === item.id ? 'is-active' : ''}" type="button" data-menu-editor-id="${item.id}">
@@ -638,9 +687,7 @@ function renderSettings(state, refs) {
     : 'Build your menu locally. New dishes are available immediately across the floor.';
 
   const selectedCategory = selectedMenuItem?.category || refs.menuEditorForm.category.value || categories[0] || 'General';
-  const categoryOptions = categories.includes(selectedCategory)
-    ? categories
-    : [selectedCategory, ...categories];
+  const categoryOptions = [...new Set([selectedCategory, ...categories].filter(Boolean))];
   refs.menuEditorForm.category.innerHTML = categoryOptions.map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join('');
 
   refs.menuEditorForm.code.value = selectedMenuItem?.code ?? '';
@@ -651,7 +698,6 @@ function renderSettings(state, refs) {
   refs.menuEditorForm.note.value = selectedMenuItem?.note ?? '';
   refs.deleteDishButton.disabled = !selectedMenuItem;
 }
-
 function renderReceipt(state, refs) {
   const receipt = state.activeReceipt;
   const markup = buildReceiptMarkup(receipt);
@@ -682,6 +728,9 @@ export function renderApp(state, refs) {
   renderSettings(state, refs);
   renderReceipt(state, refs);
 }
+
+
+
 
 
 

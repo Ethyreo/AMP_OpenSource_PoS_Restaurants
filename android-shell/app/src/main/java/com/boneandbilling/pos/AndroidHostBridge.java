@@ -65,7 +65,7 @@ public class AndroidHostBridge {
                 @Override
                 public void onPageFinished(WebView view, String url) {
                     PrintManager printManager = (PrintManager) activity.getSystemService(Context.PRINT_SERVICE);
-                    String jobName = (title == null || title.trim().isEmpty()) ? "AMP Restaurant POS Receipt" : title;
+                    String jobName = (title == null || title.trim().isEmpty()) ? "AMP PoS Receipt" : title;
                     android.print.PrintDocumentAdapter adapter = Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
                         ? printWebView.createPrintDocumentAdapter(jobName)
                         : printWebView.createPrintDocumentAdapter();
@@ -102,6 +102,73 @@ public class AndroidHostBridge {
     @JavascriptInterface
     public String getLastNativeBackupAt() {
         return BackupStorage.getLastBackupAt(activity);
+    }
+
+    @JavascriptInterface
+    public String listBackupCatalog() {
+        try {
+            JSONObject payload = new JSONObject();
+            payload.put("status", "ok");
+            payload.put("message", "Backups listed from Downloads/KenPoS.");
+            payload.put("backups", BackupStorage.listExternalBackups(activity));
+            return payload.toString();
+        } catch (Exception error) {
+            try {
+                JSONObject payload = new JSONObject();
+                payload.put("status", "error");
+                payload.put("message", error.getMessage() == null ? "Unable to list backups." : error.getMessage());
+                payload.put("backups", new JSONArray());
+                return payload.toString();
+            } catch (Exception ignored) {
+                return "{\"status\":\"error\",\"message\":\"Unable to list backups.\",\"backups\":[]}";
+            }
+        }
+    }
+
+    @JavascriptInterface
+    public String importLatestBackup() {
+        return buildImportPayload("Latest automatic backup loaded from Downloads/KenPoS.", BackupStorage.AUTOMATIC_FILENAME, true);
+    }
+
+    @JavascriptInterface
+    public String importBackupByName(String filename) {
+        return buildImportPayload("Backup loaded from Downloads/KenPoS.", filename, false);
+    }
+
+    private String buildImportPayload(String successMessage, String filename, boolean latest) {
+        try {
+            String content = latest ? BackupStorage.readLatestExternalBackup(activity) : BackupStorage.readExternalBackup(activity, filename);
+            JSONObject payload = new JSONObject();
+            if (content == null || content.trim().isEmpty()) {
+                payload.put("status", "missing");
+                payload.put("message", latest ? "No automatic backup file was found in Downloads/KenPoS." : "The selected backup file could not be found in Downloads/KenPoS.");
+                payload.put("content", "");
+                return payload.toString();
+            }
+            payload.put("status", "ok");
+            payload.put("message", successMessage);
+            payload.put("content", content);
+            return payload.toString();
+        } catch (Exception error) {
+            try {
+                JSONObject payload = new JSONObject();
+                payload.put("status", "error");
+                payload.put("message", error.getMessage() == null ? "Unable to read the requested backup." : error.getMessage());
+                payload.put("content", "");
+                return payload.toString();
+            } catch (Exception ignored) {
+                return "{\"status\":\"error\",\"message\":\"Unable to read the requested backup.\",\"content\":\"\"}";
+            }
+        }
+    }
+
+    @JavascriptInterface
+    public String requestLogoImagePicker() {
+        if (activity instanceof MainActivity) {
+            activity.runOnUiThread(() -> ((MainActivity) activity).openLogoPicker());
+            return "Choose a restaurant logo from this device.";
+        }
+        return "Logo picker is unavailable on this device.";
     }
 
     @JavascriptInterface
@@ -227,4 +294,7 @@ public class AndroidHostBridge {
         return Base64.decode(dataUrl.substring(index + 1), Base64.DEFAULT);
     }
 }
+
+
+
 

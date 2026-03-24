@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#f7f8fa" />
-  <title>AMP Restaurant POS</title>
+  <title>AMP PoS</title>
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="stylesheet" href="./app/styles/tokens.css" />
   <link rel="stylesheet" href="./app/styles/main.css" />
@@ -89,8 +89,8 @@
   <div class="app-shell">
     <aside class="rail no-print">
       <div class="brand-block">
-        <p class="eyebrow">AMP Restaurant POS</p>
-        <h1 id="brandRestaurantName">AMP Restaurant POS</h1>
+        <p class="eyebrow">AMP PoS</p>
+        <h1 id="brandRestaurantName">AMP PoS</h1>
         <p id="brandRestaurantMeta" class="muted">Calm service flow for busy shifts.</p>
       </div>
 
@@ -117,13 +117,7 @@
           <p class="eyebrow">Offline First</p>
           <h2 id="viewTitle">Floor Service</h2>
         </div>
-        <div class="topbar-actions">
-          <label class="search-field">
-            <span>Quick Search</span>
-            <input id="globalSearch" type="search" placeholder="Find item by code or name" autocomplete="off" />
-          </label>
-          <button id="printReceiptButton" class="button button-secondary">Print Bill</button>
-        </div>
+        <p id="topbarSignature" class="topbar-signature">AMP x Your Restaurant</p>
       </header>
 
       <section id="statusBar" class="status-bar no-print"></section>
@@ -338,14 +332,17 @@
                 </div>
                 <input id="logoFileInput" type="file" accept="image/*" class="hidden" />
               </div>
-              <p id="backupStatusText" class="muted tool-status">Automatic backup stores the latest local database snapshot in Downloads/KenPoS once every 24 hours.</p>
+              <p id="backupStatusText" class="muted tool-status">Automatic backup stores the latest local database snapshot in Downloads/KenPoS once every 24 hours. You can restore the latest automatic backup directly or import any backup JSON file manually.</p>
               <div class="tool-actions two-column-actions">
                 <button id="exportBackupButton" class="button" type="button">Export Backup</button>
-                <button id="importBackupButton" class="button button-secondary" type="button">Import Backup</button>
+                <button id="importBackupButton" class="button button-secondary" type="button">Import Backup File</button>
+                <button id="restoreLatestBackupButton" class="button button-secondary" type="button">Restore Latest Backup</button>
+                <button id="refreshBackupCatalogButton" class="button button-ghost" type="button">Refresh Backup List</button>
                 <button id="resetDraftsButton" class="button button-ghost" type="button">Clear Open Drafts</button>
               </div>
               <input id="backupFileInput" type="file" accept="application/json" class="hidden" />
               <div id="backupSnapshot" class="tool-metrics"></div>
+              <div id="backupCatalogList" class="backup-catalog-list"></div>
             </section>
 
             <section class="glass-panel tools-panel premium-subpanel">
@@ -386,44 +383,22 @@
               <div id="menuCatalogList" class="menu-catalog-list"></div>
             </section>
 
-            <section class="glass-panel menu-editor premium-panel">
+            <section class="glass-panel category-studio premium-panel">
               <div class="panel-header">
-                <h4 id="menuEditorTitle">Add a new dish</h4>
-                <p id="menuEditorCaption" class="muted">Build your menu locally. New dishes are available immediately across the floor.</p>
-              </div>
-              <form id="menuEditorForm" class="menu-editor-form">
-                <label>
-                  <span>Dish Code</span>
-                  <input name="code" type="text" maxlength="8" placeholder="501" required />
-                </label>
-                <label>
-                  <span>Dish Name</span>
-                  <input name="name" type="text" maxlength="60" placeholder="Truffle Kulcha" required />
-                </label>
-                <label>
-                  <span>Category</span>
-                  <select name="category" required></select>
-                </label>
-                <label>
-                  <span>Price</span>
-                  <input name="price" type="number" min="0" step="0.01" placeholder="325" required />
-                </label>
-                <label>
-                  <span>Type</span>
-                  <select name="type">
-                    <option value="veg">Veg</option>
-                    <option value="nonveg">Non-Veg</option>
-                  </select>
-                </label>
-                <label class="menu-editor-note">
-                  <span>Short Note</span>
-                  <textarea name="note" rows="4" maxlength="120" placeholder="Creamy, smoky, high-margin signature."></textarea>
-                </label>
-                <div class="menu-editor-actions">
-                  <button type="submit" class="button">Save Dish</button>
-                  <button id="deleteDishButton" type="button" class="button button-ghost">Delete Dish</button>
+                <div>
+                  <p class="eyebrow">Category Studio</p>
+                  <h4>Food Categories</h4>
                 </div>
+              </div>
+              <form id="categoryForm" class="category-form">
+                <label>
+                  <span>New Category</span>
+                  <input id="categoryNameInput" name="categoryName" type="text" maxlength="32" placeholder="Small Plates" required />
+                </label>
+                <button class="button button-secondary" type="submit">Add Category</button>
               </form>
+              <p class="muted">Delete only empty categories. If dishes still use one, reassign those dishes first.</p>
+              <div id="categoryCatalogList" class="category-catalog-list"></div>
             </section>
           </section>
         </div>
@@ -455,8 +430,14 @@
     <div class="drawer-body">
       <section id="drawerMenuSection" class="drawer-section menu-section">
         <div class="menu-toolbar">
-          <div class="chip-row" id="categoryChips"></div>
-          <button id="toggleMenuCardModeButton" class="button button-ghost menu-view-toggle" type="button">Compact Menu</button>
+          <label class="search-field drawer-search-field">
+            <span>Quick Search</span>
+            <input id="globalSearch" type="search" placeholder="Find item by code or name" autocomplete="off" />
+          </label>
+          <div class="menu-toolbar-row">
+            <div class="chip-row" id="categoryChips"></div>
+            <button id="toggleMenuCardModeButton" class="button button-ghost menu-view-toggle" type="button">Compact Menu</button>
+          </div>
         </div>
         <div id="menuList" class="menu-list"></div>
       </section>
@@ -488,6 +469,51 @@
     </div>
   </aside>
 
+  <section id="menuEditorModal" class="app-modal hidden" aria-hidden="true">
+    <div class="app-modal-card premium-panel" role="dialog" aria-modal="true" aria-labelledby="menuEditorTitle">
+      <div class="panel-header split-header">
+        <div>
+          <h4 id="menuEditorTitle">Add a new dish</h4>
+          <p id="menuEditorCaption" class="muted">Build your menu locally. New dishes are available immediately across the floor.</p>
+        </div>
+        <button id="closeMenuEditorButton" type="button" class="button button-ghost">Close</button>
+      </div>
+      <form id="menuEditorForm" class="menu-editor-form">
+        <label>
+          <span>Dish Code</span>
+          <input name="code" type="text" maxlength="8" placeholder="501" required />
+        </label>
+        <label>
+          <span>Dish Name</span>
+          <input name="name" type="text" maxlength="60" placeholder="Truffle Kulcha" required />
+        </label>
+        <label>
+          <span>Category</span>
+          <select name="category" required></select>
+        </label>
+        <label>
+          <span>Price</span>
+          <input name="price" type="number" min="0" step="0.01" placeholder="325" required />
+        </label>
+        <label>
+          <span>Type</span>
+          <select name="type">
+            <option value="veg">Veg</option>
+            <option value="nonveg">Non-Veg</option>
+          </select>
+        </label>
+        <label class="menu-editor-note">
+          <span>Short Note</span>
+          <textarea name="note" rows="4" maxlength="120" placeholder="Creamy, smoky, high-margin signature."></textarea>
+        </label>
+        <div class="menu-editor-actions">
+          <button type="submit" class="button">Save Dish</button>
+          <button id="deleteDishButton" type="button" class="button button-ghost">Delete Dish</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
   <section id="receiptPrintArea" class="receipt-print-area"></section>
 
   <template id="emptyStateTemplate">
@@ -501,6 +527,10 @@
   <script type="module" src="./app/scripts/main.js"></script>
 </body>
 </html>
+
+
+
+
 
 
 

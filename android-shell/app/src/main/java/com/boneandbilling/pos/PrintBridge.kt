@@ -44,7 +44,7 @@ class PrintBridge(private val context: Context) {
             printWebView.webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     val printManager = context.getSystemService(Context.PRINT_SERVICE) as PrintManager
-                    val jobName = if (title.isBlank()) "AMP Restaurant POS Receipt" else title
+                    val jobName = if (title.isBlank()) "AMP PoS Receipt" else title
                     val adapter = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                         printWebView.createPrintDocumentAdapter(jobName)
                     } else {
@@ -70,3 +70,4 @@ class PrintBridge(private val context: Context) {
         }
     }
 }
+

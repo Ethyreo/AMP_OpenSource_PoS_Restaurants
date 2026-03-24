@@ -14,7 +14,7 @@ export const DEFAULT_SETTINGS = {
   restaurantName: '',
   receiptFooter: 'Thanks for dining with us.',
   serviceChargeRate: 5,
-  gstEnabled: true,
+  gstEnabled: false,
   gstRate: 5,
   gstNumber: '',
   defaultDiscount: 0,
@@ -28,6 +28,7 @@ export const DEFAULT_SETTINGS = {
   restaurantLogoDataUrl: '',
   setupCompletedAt: '',
   tableCount: 12,
+  categories: ['Starters', 'Mains', 'Breads', 'Rice', 'Drinks', 'Desserts'],
 };
 
 export const DEFAULT_MENU = [
@@ -83,6 +84,20 @@ function normalizeMenu(menu) {
   })).sort((a, b) => a.code.localeCompare(b.code));
 }
 
+function normalizeCategoryList(categories) {
+  const source = Array.isArray(categories) ? categories : DEFAULT_SETTINGS.categories;
+  const normalized = [];
+
+  source.forEach((entry) => {
+    const value = String(entry || '').trim();
+    if (value && !normalized.some((current) => current.localeCompare(value, undefined, { sensitivity: 'base' }) === 0)) {
+      normalized.push(value);
+    }
+  });
+
+  return normalized.length ? normalized : [...DEFAULT_SETTINGS.categories];
+}
+
 function normalizeSettings(settings) {
   const merged = { ...DEFAULT_SETTINGS, ...(settings ?? {}) };
   return {
@@ -103,6 +118,7 @@ function normalizeSettings(settings) {
     menuCardMode: merged.menuCardMode === 'compact' ? 'compact' : 'detail',
     restaurantLogoDataUrl: String(merged.restaurantLogoDataUrl || ''),
     setupCompletedAt: String(merged.setupCompletedAt || ''),
+    categories: normalizeCategoryList(merged.categories),
     tableCount: Math.max(1, Number(merged.tableCount) || DEFAULT_SETTINGS.tableCount),
   };
 }
@@ -195,6 +211,10 @@ export async function bootstrapAppData() {
   const normalizedMenu = normalizeMenu(recovery?.menu ?? menu);
   const normalizedTables = normalizeTables(recovery?.tables ?? tables, normalizedSettings.tableCount);
   const normalizedHistory = Array.isArray(recovery?.billHistory) ? recovery.billHistory : billHistory;
+  normalizedSettings.categories = normalizeCategoryList([
+    ...normalizedSettings.categories,
+    ...normalizedMenu.map((item) => item.category),
+  ]);
 
   return {
     tables: normalizedTables,
@@ -232,6 +252,10 @@ export async function replaceAppSnapshot(snapshot) {
   const settings = normalizeSettings(snapshot.settings);
   const tables = normalizeTables(snapshot.tables, settings.tableCount);
   const menu = normalizeMenu(snapshot.menu);
+  settings.categories = normalizeCategoryList([
+    ...settings.categories,
+    ...menu.map((item) => item.category),
+  ]);
   const billHistory = Array.isArray(snapshot.billHistory) ? snapshot.billHistory : [];
 
   await Promise.all([
@@ -250,6 +274,8 @@ export async function replaceAppSnapshot(snapshot) {
     billHistory,
   };
 }
+
+
 
 
 

@@ -1,5 +1,5 @@
 {
-  "name": "AMP Restaurant POS",
+  "name": "AMP PoS",
   "short_name": "BoneBill",
   "start_url": "./index.html",
   "display": "standalone",
@@ -7,4 +7,5 @@
   "theme_color": "#f7f8fa",
   "description": "Local-first restaurant POS for Android devices with calm floor flow and print-ready billing."
 }
+
 

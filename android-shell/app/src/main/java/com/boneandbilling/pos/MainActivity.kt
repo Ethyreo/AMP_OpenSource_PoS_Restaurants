@@ -4,6 +4,9 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.util.Base64
+import android.util.Log
+import android.webkit.ConsoleMessage
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -14,6 +17,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewClientCompat
 import com.boneandbilling.pos.databinding.ActivityMainBinding
+import org.json.JSONObject
 
 class MainActivity : AppCompatActivity() {
 
@@ -38,6 +42,28 @@ class MainActivity : AppCompatActivity() {
             null
         }
         callback?.onReceiveValue(resultUris)
+    }
+
+    private val logoPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri == null) {
+            dispatchCustomEvent("native-logo-selection-cancelled", JSONObject())
+            return@registerForActivityResult
+        }
+
+        try {
+            val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            if (bytes == null || bytes.isEmpty()) {
+                dispatchCustomEvent("native-logo-selection-error", JSONObject().put("message", "Selected image could not be read."))
+                return@registerForActivityResult
+            }
+            val mimeType = contentResolver.getType(uri) ?: "image/png"
+            val dataUrl = "data:$mimeType;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP)
+            dispatchCustomEvent("native-logo-selected", JSONObject().put("dataUrl", dataUrl))
+        } catch (error: Exception) {
+            dispatchCustomEvent("native-logo-selection-error", JSONObject().put("message", error.message ?: "Unable to read the selected image."))
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -92,11 +118,39 @@ class MainActivity : AppCompatActivity() {
                     false
                 }
             }
+
+            override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                if (consoleMessage != null) {
+                    Log.d(
+                        "AMPPOS",
+                        "${consoleMessage.message()} @ ${consoleMessage.sourceId()}:${consoleMessage.lineNumber()}"
+                    )
+                }
+                return super.onConsoleMessage(consoleMessage)
+            }
         }
 
         if (savedInstanceState == null) {
             binding.webView.loadUrl("https://appassets.androidplatform.net/assets/web/index.html")
+        } else {
+            binding.webView.restoreState(savedInstanceState)
         }
+    }
+
+    fun openLogoPicker() {
+        logoPickerLauncher.launch("image/*")
+    }
+
+    private fun dispatchCustomEvent(name: String, detail: JSONObject) {
+        binding.webView.post {
+            val script = "window.dispatchEvent(new CustomEvent(${JSONObject.quote(name)}, { detail: ${detail} }));"
+            binding.webView.evaluateJavascript(script, null)
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        binding.webView.saveState(outState)
     }
 
     override fun onBackPressed() {
