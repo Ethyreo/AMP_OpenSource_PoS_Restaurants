@@ -1,5 +1,7 @@
 # Operations Checklist
 
+This file is the working checklist. For the broader historical log, read SESSION-LOG.md in the same folder.
+
 ## Completed
 - [x] Rename app to `AMP Restaurant POS` across web shell, Android label, manifest, and receipt defaults.
 - [x] Change launch attribution to `Built by Gurman Singh for`.
